@@ -12,8 +12,9 @@ use std::{
 use clap::{Arg, Command};
 use config::Config;
 use difftest::{
-    backends::{Backend, Cranelift, Miri, OptLevel, GCC, LLVM},
-    run_diff_test, BackendName, Source,
+    BackendName, Source,
+    backends::{Backend, Cranelift, GCC, LLVM, Miri, OptLevel},
+    run_diff_test,
 };
 use log::{debug, error, info};
 

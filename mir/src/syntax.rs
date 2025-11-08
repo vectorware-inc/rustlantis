@@ -1,6 +1,6 @@
 use std::num::TryFromIntError;
 
-use index_vec::{define_index_type, IndexVec};
+use index_vec::{IndexVec, define_index_type};
 use smallvec::SmallVec;
 
 use crate::tyctxt::TyCtxt;
@@ -489,23 +489,9 @@ impl TyKind {
     pub const F32: Self = TyKind::Float(FloatTy::F32);
     pub const F64: Self = TyKind::Float(FloatTy::F64);
 
-    pub const INTS: [Self; 6] = [
-        Self::ISIZE,
-        Self::I8,
-        Self::I16,
-        Self::I32,
-        Self::I64,
-        Self::I128,
-    ];
+    pub const INTS: [Self; 5] = [Self::ISIZE, Self::I8, Self::I16, Self::I32, Self::I64];
 
-    pub const UINTS: [Self; 6] = [
-        Self::USIZE,
-        Self::U8,
-        Self::U16,
-        Self::U32,
-        Self::U64,
-        Self::U128,
-    ];
+    pub const UINTS: [Self; 5] = [Self::USIZE, Self::U8, Self::U16, Self::U32, Self::U64];
 
     pub const FLOATS: [Self; 2] = [Self::F32, Self::F64];
 
@@ -718,18 +704,30 @@ impl Program {
     pub const FUNCTION_ATTRIBUTE: &'static str =
         "#[custom_mir(dialect = \"runtime\", phase = \"initial\")]";
     pub const HEADER: &'static str = "#![recursion_limit = \"1024\"]
+    // Should be OK, since we are single threaded, and the mutable hasher is carefully
+    // only used in a very small scope. Plus, we run all reductions under MIRI. 
+    #![allow(static_mut_refs)]
     #![feature(custom_mir, core_intrinsics, lazy_get)]
+    #![cfg_attr(
+    target_arch = \"nvptx64\",
+    feature(abi_gpu_kernel, asm_experimental_arch, stdarch_nvptx)
+    )]
+    #![cfg_attr(target_arch = \"nvptx64\", no_std)]
     #![allow(unused_parens, unused_assignments, overflowing_literals)]
     extern crate core;
     use core::intrinsics::mir::*;\n";
 
     pub const DUMPER: &'static str = r#"
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use std::sync::LazyLock;
-
-    static mut H: LazyLock<DefaultHasher> = LazyLock::new(|| DefaultHasher::new());
-
+    use core::hash::SipHasher;
+    use core::hash::{Hash, Hasher};
+    
+    static mut H: SipHasher =
+        const { unsafe { core::mem::transmute::<[u8; size_of::<SipHasher>()], SipHasher>([0; _]) } };
+    #[cfg(target_arch = "nvptx64")]
+    #[panic_handler]
+    fn panic(_info: &core::panic::PanicInfo) -> ! {
+        unsafe { core::arch::nvptx::trap() };
+    }
     #[inline(never)]
     fn dump_var(
         val0: impl Hash,
@@ -738,16 +736,86 @@ impl Program {
         val3: impl Hash,
     ) {
         unsafe {
-            val0.hash(LazyLock::force_mut(&mut H));
-            val1.hash(LazyLock::force_mut(&mut H));
-            val2.hash(LazyLock::force_mut(&mut H));
-            val3.hash(LazyLock::force_mut(&mut H));
+            val0.hash(&mut H);
+            val1.hash(&mut H);
+            val2.hash(&mut H);
+            val3.hash(&mut H);
         }
     }
     "#;
 
     pub const DEBUG_DUMPER: &'static str = r#"
-    use std::fmt::Debug;
+    use core::fmt::Error;
+use core::fmt::Write;
+use core::*;
+struct VPrintfWrite;
+unsafe extern "C" {
+    fn vprintf(
+        fmt: *const core::ffi::c_char,
+        fmt_do_not_use_directly: *const *const (),
+    ) -> core::ffi::c_int;
+    fn printf(format: *const core::ffi::c_char, ...) -> core::ffi::c_int;
+}
+const CAP: usize = 128;
+#[inline]
+fn write_raw(buf: &mut [u8; CAP], len: usize) {
+    if len == 0 {
+        return;
+    }
+    // Null terminate
+    buf[len] = 0;
+
+    #[cfg(target_arch = "nvptx64")]
+    {
+        let fmt = [core::ptr::null()];
+        unsafe { vprintf(buf.as_ptr() as *const core::ffi::c_char, fmt.as_ptr()) };
+    }
+    #[cfg(not(any(target_arch = "nvptx64",miri)))]
+    unsafe {
+        printf(buf.as_ptr() as *const core::ffi::c_char)
+    };
+    #[cfg(miri)]
+    use std::io::Write;
+    #[cfg(miri)]
+    std::io::stdout().lock().write_all(buf);
+}
+impl Write for VPrintfWrite {
+    fn write_str(&mut self, s: &str) -> Result<(), Error> {
+        const USABLE_BYTES: usize = CAP - 1;
+        let mut buf = [0u8; CAP];
+        let mut len = 0;
+        for &b in s.as_bytes() {
+            if b == 0 {
+                continue;
+            }
+            if b == b'%' && !cfg!(miri) {
+                if USABLE_BYTES.saturating_sub(len) < 2 {
+                    write_raw(&mut buf, len);
+                    len = 0;
+                }
+                buf[len] = b'%';
+                len += 1;
+                buf[len] = b'%';
+                len += 1;
+            } else {
+                if USABLE_BYTES.saturating_sub(len) < 1 {
+                    write_raw(&mut buf, len);
+                    len = 0;
+                }
+                buf[len] = b;
+                len += 1;
+            }
+        }
+        write_raw(&mut buf, len);
+        Ok(())
+    }
+}
+#[cfg(target_arch = "nvptx64")]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    unsafe { core::arch::nvptx::trap() };
+}
+    use core::fmt::Debug;
 
     #[inline(never)]
     fn dump_var(
@@ -757,7 +825,7 @@ impl Program {
         var2: usize, val2: impl Debug,
         var3: usize, val3: impl Debug,
     ) {
-        println!("fn{f}:_{var0} = {val0:?}\n_{var1} = {val1:?}\n_{var2} = {val2:?}\n_{var3} = {val3:?}");
+        writeln!(VPrintfWrite,"fn{f}:_{var0} = {val0:?}\n_{var1} = {val1:?}\n_{var2} = {val2:?}\n_{var3} = {val3:?}");
     }
     "#;
 

@@ -2,8 +2,9 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use config::Config;
 use difftest::{
-    backends::{Backend, Cranelift, Miri, OptLevel, LLVM},
-    run_diff_test, Source,
+    Source,
+    backends::{Backend, Cranelift, LLVM, Miri, OptLevel},
+    run_diff_test,
 };
 
 #[test]
@@ -42,7 +43,9 @@ fn correct_mir() {
         backends,
     );
     assert!(results.all_same());
-    assert!(results["llvm"]
-        .as_ref()
-        .is_ok_and(|output| output.status.success() && output.stdout == "5\n"))
+    assert!(
+        results["llvm"]
+            .as_ref()
+            .is_ok_and(|output| output.status.success() && output.stdout == "5\n")
+    )
 }

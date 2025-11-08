@@ -15,9 +15,9 @@ use mir::{
     tyctxt::TyCtxt,
 };
 use petgraph::{
-    prelude::EdgeIndex, prelude::NodeIndex, stable_graph::StableGraph, visit::EdgeRef, Direction,
+    Direction, prelude::EdgeIndex, prelude::NodeIndex, stable_graph::StableGraph, visit::EdgeRef,
 };
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 use crate::mem::{
     AbstractByte, AllocId, AllocationBuilder, BasicMemory, BorrowType, RunPointer, Tag,

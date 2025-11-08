@@ -2,7 +2,7 @@ use mir::{
     syntax::{FloatTy, IntTy, Literal, TyId, TyKind, UintTy},
     tyctxt::TyCtxt,
 };
-use rand::{seq::SliceRandom, Rng, RngCore};
+use rand::{Rng, RngCore, seq::SliceRandom};
 use rand_distr::Distribution;
 
 use crate::ty::ARRAY_MAX_LEN;
@@ -32,8 +32,12 @@ impl Distribution<isize> for Sombrero {
 
 pub trait GenLiteral: Rng {
     fn is_literalble(ty: TyId, tcx: &TyCtxt) -> bool {
+        if *ty.kind(tcx) == TyKind::I128 || *ty.kind(tcx) == TyKind::U128 {
+            return false;
+        }
         match ty.kind(tcx) {
             TyKind::Unit => false,
+
             _ => ty.is_scalar(tcx),
         }
     }
@@ -58,7 +62,7 @@ pub trait GenLiteral: Rng {
             TyKind::Uint(UintTy::U16) => self.gen_range(u16::MIN..=u16::MAX).into(),
             TyKind::Uint(UintTy::U32) => self.gen_range(u32::MIN..=u32::MAX).into(),
             TyKind::Uint(UintTy::U64) => self.gen_range(u64::MIN..=u64::MAX).into(),
-            TyKind::Uint(UintTy::U128) => self.gen_range(u128::MIN..=u128::MAX).into(),
+            //TyKind::Uint(UintTy::U128) => self.gen_range(u128::MIN..=u128::MAX).into(),
             TyKind::Int(IntTy::Isize) => {
                 let i: isize = Sombrero.sample(self);
                 i.try_into().expect("isize isn't greater than 128 bits")
@@ -67,7 +71,7 @@ pub trait GenLiteral: Rng {
             TyKind::Int(IntTy::I16) => self.gen_range(i16::MIN..=i16::MAX).into(),
             TyKind::Int(IntTy::I32) => self.gen_range(i32::MIN..=i32::MAX).into(),
             TyKind::Int(IntTy::I64) => self.gen_range(i64::MIN..=i64::MAX).into(),
-            TyKind::Int(IntTy::I128) => self.gen_range(i128::MIN..=i128::MAX).into(),
+            //TyKind::Int(IntTy::I128) => self.gen_range(i128::MIN..=i128::MAX).into(),
             TyKind::Float(FloatTy::F32) => generate_f32(self).into(),
             TyKind::Float(FloatTy::F64) => generate_f64(self).into(),
             _ => return None,

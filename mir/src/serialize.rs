@@ -401,7 +401,7 @@ impl Program {
         let arg_list: String = self
             .entry_args
             .iter()
-            .map(|arg| format!("std::hint::black_box({})", arg.serialize(tcx)))
+            .map(|arg| format!("core::hint::black_box({})", arg.serialize(tcx)))
             .intersperse(", ".to_string())
             .collect();
 
@@ -417,7 +417,13 @@ impl Program {
         } else {
             r#"
                 unsafe {
+                    #[cfg(not(target_arch = "nvptx64"))]
                     println!("hash: {}", H.finish());
+                    #[cfg(target_arch = "nvptx64")]
+                    {
+                        let mut fmt = [H.finish()];
+                        core::arch::nvptx::vprintf(c"hash: %lu\n".as_ptr() as *const _, &raw mut fmt as *mut _);
+                    }
                 }
             "#
         };
@@ -426,7 +432,12 @@ impl Program {
             "pub fn main() {{
                 {first_fn}({arg_list});
                 {hash_printer}
-            }}"
+            }}
+            #[cfg(target_arch = \"nvptx64\")]
+#[unsafe(no_mangle)]
+pub extern \"gpu-kernel\" fn kernel_main() {{
+    main();                   
+        }}"
         ));
         program
     }

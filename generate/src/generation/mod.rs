@@ -14,27 +14,27 @@ use mir::syntax::{
 };
 use mir::tyctxt::TyCtxt;
 use rand::seq::SliceRandom;
-use rand::{seq::IteratorRandom, Rng, RngCore, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng, seq::IteratorRandom};
 use rand_distr::{Distribution, WeightedError, WeightedIndex};
 
 use crate::literal::GenLiteral;
 use crate::pgraph::{HasComplexity, PlaceGraph, PlaceIndex, PlaceOperand, ToPlaceIndex};
 use crate::place_select::{PlaceSelector, Weight};
-use crate::ty::{seed_tys, TySelect};
+use crate::ty::{TySelect, seed_tys};
 
 use self::intrinsics::{ArithOffset, Transmute};
 use crate::generation::intrinsics::CoreIntrinsic;
 
 /// Max. number of statements & declarations in a bb
-const BB_MAX_LEN: usize = 32;
+const BB_MAX_LEN: usize = 16;
 /// Max. number of switch targets in a SwitchInt terminator
 const MAX_SWITCH_TARGETS: usize = 8;
 /// Max. number of BB in a function if RET is init (a Return must be generated)
-const MAX_BB_COUNT: usize = 50;
+const MAX_BB_COUNT: usize = 25;
 /// Max. number of BB in a function before giving up this function
 const MAX_BB_COUNT_HARD: usize = 100;
 /// Max. number of functions in the program Call generator stops being a possible candidate
-const MAX_FN_COUNT: usize = 20;
+const MAX_FN_COUNT: usize = 8;
 /// Max. number of arguments a function can have
 const MAX_ARGS_COUNT: usize = 12;
 /// Expected proportion of variables to be dumped
@@ -211,13 +211,13 @@ impl GenerationCtx {
                             TyCtxt::I16,
                             TyCtxt::I32,
                             TyCtxt::I64,
-                            TyCtxt::I128,
+                            //TyCtxt::I128,
                             TyCtxt::USIZE,
                             TyCtxt::U8,
                             TyCtxt::U16,
                             TyCtxt::U32,
                             TyCtxt::U64,
-                            TyCtxt::U128,
+                            //TyCtxt::U128,
                         ],
                         lhs,
                     )?;
@@ -233,13 +233,13 @@ impl GenerationCtx {
                         TyCtxt::I16,
                         TyCtxt::I32,
                         TyCtxt::I64,
-                        TyCtxt::I128,
+                        //TyCtxt::I128,
                         TyCtxt::USIZE,
                         TyCtxt::U8,
                         TyCtxt::U16,
                         TyCtxt::U32,
                         TyCtxt::U64,
-                        TyCtxt::U128,
+                        //TyCtxt::U128,
                         TyCtxt::F32,
                         TyCtxt::F64,
                     ];
@@ -306,13 +306,13 @@ impl GenerationCtx {
                 TyCtxt::I16,
                 TyCtxt::I32,
                 TyCtxt::I64,
-                TyCtxt::I128,
+                //TyCtxt::I128,
                 TyCtxt::USIZE,
                 TyCtxt::U8,
                 TyCtxt::U16,
                 TyCtxt::U32,
                 TyCtxt::U64,
-                TyCtxt::U128,
+                //TyCtxt::U128,
                 TyCtxt::F32,
                 TyCtxt::F64,
                 TyCtxt::CHAR,
@@ -324,13 +324,13 @@ impl GenerationCtx {
                 TyCtxt::I16,
                 TyCtxt::I32,
                 TyCtxt::I64,
-                TyCtxt::I128,
+                //TyCtxt::I128,
                 TyCtxt::USIZE,
                 TyCtxt::U8,
                 TyCtxt::U16,
                 TyCtxt::U32,
                 TyCtxt::U64,
-                TyCtxt::U128,
+                //TyCtxt::U128,
                 TyCtxt::F32,
                 TyCtxt::F64,
             ][..],
@@ -685,13 +685,13 @@ impl GenerationCtx {
                 TyCtxt::I16,
                 TyCtxt::I32,
                 TyCtxt::I64,
-                TyCtxt::I128,
+                //TyCtxt::I128,
                 TyCtxt::USIZE,
                 TyCtxt::U8,
                 TyCtxt::U16,
                 TyCtxt::U32,
                 TyCtxt::U64,
-                TyCtxt::U128,
+                //TyCtxt::U128,
                 // Ty::Char,
                 // Ty::Bool,
             ])

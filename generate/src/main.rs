@@ -8,13 +8,13 @@
 mod generation;
 mod literal;
 mod mem;
-mod place_select;
 mod pgraph;
+mod place_select;
 mod ty;
 
 use std::time::Instant;
 
-use clap::{arg, command, value_parser, Arg};
+use clap::{Arg, arg, command, value_parser};
 use log::{debug, info};
 
 use crate::generation::GenerationCtx;

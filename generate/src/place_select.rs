@@ -372,15 +372,15 @@ mod tests {
         tyctxt::TyCtxt,
     };
     use rand::{
+        Rng, SeedableRng,
         rngs::SmallRng,
         seq::{IteratorRandom, SliceRandom},
-        Rng, SeedableRng,
     };
     use test::Bencher;
 
     use crate::{
         pgraph::PlaceGraph,
-        ty::{seed_tys, TySelect},
+        ty::{TySelect, seed_tys},
     };
 
     use super::PlaceSelector;

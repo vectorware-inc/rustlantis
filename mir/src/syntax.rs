@@ -756,7 +756,7 @@ unsafe extern "C" {
     ) -> core::ffi::c_int;
     fn printf(format: *const core::ffi::c_char, ...) -> core::ffi::c_int;
 }
-const CAP: usize = 128;
+const CAP: usize = 16;
 #[inline]
 fn write_raw(buf: &mut [u8; CAP], len: usize) {
     if len == 0 {

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, thread::sleep, time::Duration};
 
 fn show_usage() {
     println!(
@@ -22,6 +22,25 @@ pub fn run() -> Result<(), String> {
         .unwrap_or(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--test-reduction" => {
+                let res = test_cached(args.next().unwrap().as_ref(), false, &mut None);
+                match res {
+                    Ok(Ok(_)) => {
+                        eprintln!("Same");
+
+                        std::process::exit(1);
+                    }
+                    Ok(Err(_)) => {
+                        eprintln!("Different");
+
+                        std::process::exit(0);
+                    }
+                    Err(err) => {
+                        eprintln!("Runtime error {err:?}");
+                        std::process::exit(1);
+                    }
+                }
+            }
             "--reduce" => {
                 let Some(path) = args.next() else {
                     return Err("--reduce must be provided with a path".into());
@@ -67,7 +86,6 @@ pub fn run() -> Result<(), String> {
     assert!(
         std::process::Command::new("cargo")
             .args(["build", "--release"])
-            
             .current_dir("..")
             .spawn()
             .unwrap()
@@ -164,7 +182,9 @@ fn fuzz_range(start: u64, end: u64, threads: usize) {
 /// Builds & runs a file with LLVM.
 fn debug_llvm(path: &std::path::Path) -> Result<Vec<u8>, String> {
     // Build a file named `llvm_elf`...
-    let exe_path = path.with_extension("llvm_elf");
+    let exe_path = std::fs::canonicalize(path)
+        .unwrap()
+        .with_extension("llvm_elf");
     // ... using the LLVM backend ...
     let output = std::process::Command::new("rustc")
         .arg(path)
@@ -173,7 +193,7 @@ fn debug_llvm(path: &std::path::Path) -> Result<Vec<u8>, String> {
         .arg("--edition=2024")
         .output()
         .map_err(|err| format!("{err:?}"))?;
-   
+
     // ... check that the compilation succeeded ...
     if !output.status.success() {
         return Err(format!("LLVM compilation failed:{output:?}"));
@@ -191,6 +211,7 @@ fn debug_llvm(path: &std::path::Path) -> Result<Vec<u8>, String> {
     }
     // ... cleanup that executable ...
     std::fs::remove_file(exe_path).map_err(|err| format!("{err:?}"))?;
+
     // ... and return the output(stdout + stderr - this allows UB checks to fire).
     let mut res = output.stdout;
     res.extend(output.stderr);
@@ -200,7 +221,7 @@ fn debug_llvm(path: &std::path::Path) -> Result<Vec<u8>, String> {
 /// Builds & runs a file with GCC.
 fn release_gcc(path: &std::path::Path) -> Result<Vec<u8>, String> {
     // Build a file named `gcc_elf`...
-    let exe_path = path.with_extension("ptx");
+    let exe_path = std::fs::canonicalize(path).unwrap().with_extension("ptx");
     // ... using the GCC backend ...
     let mut cmd = std::process::Command::new("rustc");
     cmd.arg(path).arg("-O").arg("-o").arg(&exe_path).args([
@@ -218,13 +239,15 @@ fn release_gcc(path: &std::path::Path) -> Result<Vec<u8>, String> {
     if !output.status.success() {
         return Err(format!("GPU compilation failed:{output:?}"));
     }
+    let run = std::env::current_exe().unwrap();
+    let mut run = run.parent().unwrap().to_path_buf();
+    run.push("run");
     // ... run the resulting executable ..
-    let mut cmd = std::process::Command::new("target/release/run");
-    cmd
-        .arg(&exe_path)
-        .current_dir("..");
-  
+    let mut cmd = std::process::Command::new(run);
+    cmd.arg(&exe_path).current_dir("..");
+
     let output = cmd.output().map_err(|err| format!("{err:?}"))?;
+
     // ... check it run normally ...
     if !output.status.success() {
         return Err(format!(
@@ -233,6 +256,10 @@ fn release_gcc(path: &std::path::Path) -> Result<Vec<u8>, String> {
     }
     // ... cleanup that executable ...
     std::fs::remove_file(exe_path).map_err(|err| format!("{err:?}"))?;
+    // `llvm-bitcode-linker` has an annoying bug, where it does not clean up `.o` & `.txt` files it emits.
+    std::fs::remove_file(path.with_extension("symbols.txt")).unwrap();
+    std::fs::remove_file(path.with_extension("o")).unwrap();
+    std::fs::remove_file(path.with_extension("optimized.o")).unwrap();
     // ... and return the output(stdout + stderr - this allows UB checks to fire).
     let mut res = output.stdout;
     res.extend(output.stderr);
@@ -262,6 +289,12 @@ pub fn test_cached(
     let (llvm_res, old_gcc) = cache.as_ref().unwrap();
     // ... compare the results ...
     if *llvm_res != gcc_res && gcc_res == *old_gcc {
+        if str::from_utf8(&llvm_res).unwrap().contains("hash:") ^ str::from_utf8(&gcc_res).unwrap().contains("hash:"){
+            return Err("Hash missing???".to_string());
+        } 
+        if str::from_utf8(&gcc_res).unwrap().contains("hash: 0\n"){
+            return Err("Zero hash.".to_string());
+        }
         eprintln!(
             "llvm_res:{:?} gcc_res:{:?}",
             str::from_utf8(llvm_res).unwrap(),
@@ -270,6 +303,7 @@ pub fn test_cached(
         // .. if they don't match, report an error.
         Ok(Err(source_file.to_path_buf()))
     } else {
+        
         if remove_tmps {
             std::fs::remove_file(source_file).map_err(|err| format!("{err:?}"))?;
         }
